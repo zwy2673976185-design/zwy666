@@ -1,0 +1,1051 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>悬浮窗系统</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: "Microsoft YaHei", sans-serif; }
+        body { height: 100vh; overflow: hidden; position: relative; margin: 0; padding: 0; }
+        
+        /* 动态内容容器：JS动态渲染页面 */
+        #dynamicContent { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            z-index: 1; overflow: auto; background: #fff; 
+        }
+
+        /* 悬浮球：常驻顶层 */
+        .float-btn { 
+            position: fixed; z-index: 9999; width: 60px; height: 60px; border-radius: 0; box-shadow: 0 3px 15px rgba(0,0,0,0.3); 
+            cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; transition: transform 0.2s ease; 
+            background-image: url(https://i.imgs.ovh/2025/09/28/75fraO.jpeg); background-color: #f0f0f0; 
+            background-size: cover; background-position: center; background-repeat: no-repeat; 
+            padding: 0; margin: 0; border: none; right: 20px; bottom: 50px; 
+        }
+        .float-btn:active { transform: scale(0.95); }
+        
+        /* 悬浮窗：JS动态控制公告面板状态 */
+        .float-window { 
+            position: fixed; z-index: 9998; width: 300px; height: 280px; background: white; border-radius: 12px; 
+            box-shadow: 0 5px 25px rgba(0,0,0,0.15); overflow: hidden; display: none; opacity: 0; transition: opacity 0.3s ease; 
+        }
+        .float-window.active { display: block; opacity: 1; }
+        
+        .window-header { 
+            padding: 12px 15px; background: linear-gradient(90deg, #2563eb, #3b82f6); color: white; 
+            font-size: 16px; font-weight: 500; display: flex; justify-content: space-between; align-items: center; 
+            cursor: move; -webkit-tap-highlight-color: transparent; height: 44px; 
+        }
+        .modal-back { 
+            background: transparent; border: none; color: white; font-size: 14px; cursor: pointer; 
+            padding: 4px 8px; border-radius: 4px; display: none; 
+        }
+        
+        .func-buttons { 
+            padding: 10px; display: flex; flex-direction: column; gap: 10px; 
+            max-height: calc(280px - 44px); overflow-y: auto; 
+        }
+        .func-btn { 
+            padding: 12px 15px; border-radius: 8px; background: #f8f9fa; font-size: 14px; color: #333; 
+            text-align: left; cursor: pointer; transition: background 0.2s ease; 
+            display: flex; align-items: center; justify-content: space-between; 
+            border: none; 
+        }
+        .func-btn:hover { background: #f1f3f5; }
+        .btn-icon { width: 20px; height: 20px; opacity: 0.7; }
+        
+        .content-panel { 
+            padding: 15px; max-height: calc(280px - 44px); overflow-y: auto; display: none; 
+            /* 修复：禁止水平滚动，只允许垂直滚动 */
+            overflow-x: hidden;
+        }
+        .content-panel.active { display: block; }
+        
+        /* 注册登录系统样式 - 彻底修复遮挡问题 */
+        .auth-container { 
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .auth-header {
+            flex-shrink: 0;
+        }
+        
+        .auth-content {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding-bottom: 10px;
+        }
+        
+        .auth-footer {
+            flex-shrink: 0;
+            border-top: 1px solid #e2e8f0;
+            background: #f8fafc;
+            margin: 0 -15px -15px -15px;
+            padding: 10px 15px;
+        }
+        
+        .auth-tabs { 
+            display: flex; 
+            background: #f8fafc; 
+            border-bottom: 1px solid #e2e8f0; 
+            margin: 0 -15px 15px -15px; 
+            width: calc(100% + 30px);
+        }
+        .auth-tab { 
+            flex: 1; 
+            padding: 10px; 
+            text-align: center; 
+            cursor: pointer; 
+            font-weight: 500; 
+            color: #64748b; 
+            font-size: 13px; 
+            white-space: nowrap;
+            overflow: hidden;
+        }
+        .auth-tab.active { color: #2563eb; border-bottom: 2px solid #2563eb; background: white; }
+        
+        .auth-form { 
+            display: none; 
+            width: 100%;
+        }
+        .auth-form.active { display: block; }
+        
+        .auth-form h3 { 
+            text-align: center; 
+            margin-bottom: 15px; 
+            color: #2d3748; 
+            font-size: 16px; 
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .form-group { 
+            margin-bottom: 12px; 
+            width: 100%;
+        }
+        .form-group label { 
+            display: block; 
+            margin-bottom: 5px; 
+            font-weight: 500; 
+            color: #4a5568; 
+            font-size: 13px; 
+        }
+        .form-group input { 
+            width: 100%; 
+            padding: 8px 10px; 
+            border: 1px solid #e2e8f0; 
+            border-radius: 4px; 
+            font-size: 13px; 
+            box-sizing: border-box;
+        }
+        .form-group input:focus { 
+            outline: none; 
+            border-color: #2563eb; 
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1); 
+        }
+        
+        .auth-btn { 
+            background: #2563eb; 
+            color: white; 
+            border: none; 
+            padding: 10px; 
+            border-radius: 4px; 
+            font-size: 13px; 
+            cursor: pointer; 
+            width: 100%; 
+            margin-top: 5px; 
+            box-sizing: border-box;
+        }
+        .auth-btn:disabled { 
+            background: #9ca3af; 
+            cursor: not-allowed; 
+        }
+        
+        .auth-notification { 
+            padding: 8px 10px; 
+            border-radius: 4px; 
+            margin-bottom: 10px; 
+            display: none; 
+            font-size: 12px; 
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .notification-success { 
+            background: #d1fae5; 
+            color: #065f46; 
+            border-left: 3px solid #10b981; 
+        }
+        .notification-error { 
+            background: #fee2e2; 
+            color: #991b1b; 
+            border-left: 3px solid #ef4444; 
+        }
+        
+        .user-info { 
+            text-align: center; 
+            display: none; 
+            width: 100%;
+            padding: 10px 0;
+        }
+        .user-info.active { display: block; }
+        
+        .user-avatar { 
+            width: 50px; 
+            height: 50px; 
+            border-radius: 50%; 
+            background: #2563eb; 
+            color: white; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-size: 1.2rem; 
+            margin: 0 auto 10px; 
+        }
+        .user-name { 
+            font-size: 16px; 
+            font-weight: 600; 
+            margin-bottom: 5px; 
+            color: #2d3748; 
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .user-email { 
+            color: #64748b; 
+            margin-bottom: 10px; 
+            font-size: 13px; 
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .logout-btn { 
+            background: #ef4444; 
+            color: white; 
+            border: none; 
+            padding: 8px 16px; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            font-size: 13px; 
+            width: auto;
+            margin: 0 auto;
+            display: block;
+        }
+        
+        .invite-info { 
+            font-size: 11px; 
+            color: #64748b; 
+            margin-top: 3px; 
+            white-space: normal;
+            word-break: break-word;
+        }
+        .optional { 
+            color: #94a3b8; 
+            font-weight: normal; 
+        }
+        
+        .auth-loading { 
+            text-align: center; 
+            padding: 10px; 
+            display: none; 
+            width: 100%;
+        }
+        .auth-spinner { 
+            border: 3px solid rgba(0, 0, 0, 0.1); 
+            border-left-color: #2563eb; 
+            border-radius: 50%; 
+            width: 25px; 
+            height: 25px; 
+            animation: spin 1s linear infinite; 
+            margin: 0 auto 5px; 
+        }
+        
+        .connection-status { 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            margin-bottom: 10px; 
+            background: rgba(37, 99, 235, 0.1); 
+            padding: 6px 10px; 
+            border-radius: 15px; 
+            font-size: 11px; 
+            color: #2563eb; 
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .status-dot { 
+            width: 8px; 
+            height: 8px; 
+            border-radius: 50%; 
+            margin-right: 6px; 
+        }
+        .status-connected { background: #4ade80; }
+        .status-disconnected { background: #f87171; }
+        .status-connecting { background: #fbbf24; }
+        
+        /* 新增：确保所有内容不会水平滚动 */
+        .auth-container * {
+            max-width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <!-- 动态内容容器：JS动态渲染（刷新保留） -->
+    <div id="dynamicContent"></div>
+
+    <!-- 悬浮球：常驻 -->
+    <button class="float-btn" id="floatBtn"></button>
+
+    <!-- 悬浮窗：JS动态控制公告状态 -->
+    <div class="float-window" id="floatWindow">
+        <div class="window-header" id="windowHeader">
+            功能面板
+            <button class="modal-back" id="modalBack">返回</button>
+        </div>
+        <div class="func-buttons" id="funcButtons">
+            <button class="func-btn" id="btnMy">
+                <span>我的</span>
+                <img src="https://img.icons8.com/ios-glyphs/30/666/user--v1.png" class="btn-icon" alt="我的">
+            </button>
+            <button class="func-btn" id="btnNotice">
+                <span>公告更新</span>
+                <img src="https://img.icons8.com/ios-glyphs/30/666/announcement--v1.png" class="btn-icon" alt="公告更新">
+            </button>
+            <button class="func-btn" id="btnContact">
+                <span>联系作者</span>
+                <img src="https://img.icons8.com/ios-glyphs/30/666/contact-card--v1.png" class="btn-icon" alt="联系作者">
+            </button>
+            <button class="func-btn" id="btnSetting">
+                <span>设置</span>
+                <img src="https://img.icons8.com/ios-glyphs/30/666/settings--v1.png" class="btn-icon" alt="设置">
+            </button>
+        </div>
+        <div class="content-panel" id="panelNotice">
+            <div id="noticeContainer">
+                <!-- JS动态插入：加载中/无新更新/更新内容 -->
+                <div class="empty-tip" id="defaultTip">加载更新信息中...</div>
+                <div class="no-new-update" id="noNewUpdate" style="display: none;">暂无新更新，有新公告将提示</div>
+                <div class="notice-item" id="pushNotice" style="display: none;"></div>
+            </div>
+        </div>
+        <div class="content-panel" id="panelMy">
+            <!-- 注册登录系统 - 重新设计布局 -->
+            <div class="auth-container" id="authContainer">
+                <div class="auth-header">
+                    <div class="connection-status">
+                        <div class="status-dot status-connecting" id="auth-status-dot"></div>
+                        <span id="auth-status-text">连接服务器中...</span>
+                    </div>
+                    
+                    <div id="auth-notification" class="auth-notification"></div>
+                    
+                    <div class="auth-loading" id="auth-loading">
+                        <div class="auth-spinner"></div>
+                        <p>处理中...</p>
+                    </div>
+                </div>
+                
+                <div class="auth-content">
+                    <!-- 登录表单 -->
+                    <div class="auth-form active" id="login-form">
+                        <h3>登录账户</h3>
+                        <div class="form-group">
+                            <label for="login-username">用户名</label>
+                            <input type="text" id="login-username" placeholder="请输入用户名">
+                        </div>
+                        <div class="form-group">
+                            <label for="login-password">密码</label>
+                            <input type="password" id="login-password" placeholder="请输入密码">
+                        </div>
+                    </div>
+                    
+                    <!-- 注册表单 -->
+                    <div class="auth-form" id="register-form">
+                        <h3>注册账户</h3>
+                        <div class="form-group">
+                            <label for="register-username">用户名</label>
+                            <input type="text" id="register-username" placeholder="请输入用户名">
+                        </div>
+                        <div class="form-group">
+                            <label for="register-email">邮箱 <span class="optional">(选填)</span></label>
+                            <input type="email" id="register-email" placeholder="请输入邮箱 (选填)">
+                        </div>
+                        <div class="form-group">
+                            <label for="register-password">密码</label>
+                            <input type="password" id="register-password" placeholder="请输入密码">
+                        </div>
+                        <div class="form-group">
+                            <label for="register-invite">邀请码</label>
+                            <input type="text" id="register-invite" placeholder="请输入邀请码">
+                            <div class="invite-info">
+                                需要有效的邀请码才能注册，每个邀请码只能使用一次
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 用户信息页面 -->
+                    <div class="user-info" id="user-info">
+                        <div class="user-avatar">
+                            <i class="fas fa-user"></i>
+                        </div>
+                        <div class="user-name" id="user-name">用户名</div>
+                        <div class="user-email" id="user-email">user@example.com</div>
+                    </div>
+                </div>
+                
+                <div class="auth-footer">
+                    <!-- 登录按钮 -->
+                    <button class="auth-btn" id="login-btn" disabled>登录</button>
+                    <!-- 注册按钮 -->
+                    <button class="auth-btn" id="register-btn" disabled>注册</button>
+                    <!-- 退出按钮 -->
+                    <button class="logout-btn" id="logout-btn" style="display: none;">退出登录</button>
+                    
+                    <!-- 选项卡 - 登录后隐藏 -->
+                    <div class="auth-tabs" id="auth-tabs">
+                        <div class="auth-tab active" data-tab="login">登录</div>
+                        <div class="auth-tab" data-tab="register">注册</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="content-panel" id="panelContact">
+            <div class="empty-tip">功能待开发</div>
+        </div>
+        <div class="content-panel" id="panelSetting">
+            <div class="empty-tip">功能待开发</div>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            if (window.floatingWindowInjected) return;
+            window.floatingWindowInjected = true;
+
+            // 配置项
+            const config = { 
+                domain: "cxk-z875",
+                latestNoticeKey: "latestReceivedNotice",
+                downloadedFileKey: "downloadedFileStatus", 
+                loadedPageKey: "savedLoadedPage", 
+                updateDoneKey: "isCurrentUpdateDone",
+                initHtmlContent: ""
+            };
+
+            // 工具函数
+            const utils = {
+                checkWindowBound(left, top) { 
+                    const w = document.documentElement.clientWidth; 
+                    const h = document.documentElement.clientHeight; 
+                    return { 
+                        left: Math.max(20, Math.min(left, w - 300 - 20)), 
+                        top: Math.max(20, Math.min(top, h - 280 - 20)) 
+                    }; 
+                },
+                formatTime(dateStr) {
+                    const date = new Date(dateStr);
+                    return `${date.getFullYear()}年${String(date.getMonth() + 1).padStart(2, '0')}月${String(date.getDate()).padStart(2, '0')}日`;
+                },
+                getStorage(key) { return localStorage.getItem(key) ? JSON.parse(localStorage.getItem(key)) : null; },
+                setStorage(key, data) { localStorage.setItem(key, JSON.stringify(data)); },
+                async calculateFileHash(content) {
+                    const encoder = new TextEncoder();
+                    const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(content));
+                    return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+                },
+                isFileDownloaded(fileName, fileHash) {
+                    const status = this.getStorage(config.downloadedFileKey);
+                    return status && status.name === fileName && status.hash === fileHash;
+                },
+                getSavedLoadedPage() { return this.getStorage(config.loadedPageKey); },
+                saveLoadedPage(pageData) { this.setStorage(config.loadedPageKey, pageData); },
+                markUpdateDone(hash) {
+                    this.setStorage(config.updateDoneKey, { done: true, targetHash: hash });
+                },
+                isUpdateDone(currentHash) {
+                    const doneInfo = this.getStorage(config.updateDoneKey);
+                    return doneInfo && doneInfo.done && doneInfo.targetHash === currentHash;
+                },
+                resetUpdateDone() {
+                    this.setStorage(config.updateDoneKey, { done: false, targetHash: "" });
+                }
+            };
+
+            // DOM元素
+            const dynamicContent = document.getElementById('dynamicContent');
+            const floatBtn = document.getElementById('floatBtn');
+            const floatWindow = document.getElementById('floatWindow');
+            const modalBack = document.getElementById('modalBack');
+            const funcButtons = document.getElementById('funcButtons');
+            const btnNotice = document.getElementById('btnNotice');
+            const panelNotice = document.getElementById('panelNotice');
+            const defaultTip = document.getElementById('defaultTip');
+            const noNewUpdate = document.getElementById('noNewUpdate');
+            const pushNotice = document.getElementById('pushNotice');
+
+            // 全局状态
+            let currentWindowPos = utils.checkWindowBound((window.innerWidth-300)/2, (window.innerHeight-280)/2);
+            let currentNoticeData = utils.getStorage(config.latestNoticeKey) || null;
+            let savedLoadedPage = utils.getSavedLoadedPage() || null;
+            let btnIsDragging = false, winIsDragging = false;
+            let btnDragStart = null, winDragStart = null;
+            let downloadInterval = null;
+
+            // 1. 初始化：加载存储页面+初始化公告状态
+            function initPage() {
+                if (savedLoadedPage && savedLoadedPage.content) {
+                    renderDynamicHtml(savedLoadedPage.content);
+                } else {
+                    dynamicContent.innerHTML = '';
+                }
+                setTimeout(() => {
+                    defaultTip.style.display = 'none';
+                    updateNoticePanelStatus();
+                }, 1000);
+            }
+
+            // 2. 核心：JS动态渲染页面
+            function renderDynamicHtml(htmlContent) {
+                if (!htmlContent) return;
+                dynamicContent.innerHTML = '';
+
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = htmlContent;
+
+                tempDiv.querySelectorAll('style').forEach(style => {
+                    dynamicContent.appendChild(style.cloneNode(true));
+                });
+
+                const bodyContent = tempDiv.querySelector('body')?.innerHTML || tempDiv.innerHTML;
+                const wrapper = document.createElement('div');
+                wrapper.innerHTML = bodyContent;
+                dynamicContent.appendChild(wrapper);
+
+                tempDiv.querySelectorAll('script').forEach(oldScript => {
+                    const newScript = document.createElement('script');
+                    oldScript.src ? (newScript.src = oldScript.src) : (newScript.textContent = oldScript.textContent);
+                    oldScript.src ? (newScript.onload = () => dynamicContent.appendChild(newScript)) : dynamicContent.appendChild(newScript);
+                });
+            }
+
+            // 3. WebSocket：新文件推送
+            let ws;
+            const RECONNECT_DELAY = 1000;
+            function initWebSocket() {
+                if (ws) ws.close();
+                ws = new WebSocket(`wss://${config.domain}.onrender.com`);
+
+                ws.onopen = () => fetchLatestNotice();
+                ws.onclose = () => setTimeout(initWebSocket, RECONNECT_DELAY);
+                ws.onerror = (err) => { console.error('WebSocket错误：', err); if (ws.readyState !== 3) ws.close(); };
+
+                ws.onmessage = async (e) => {
+                    try {
+                        const newData = JSON.parse(e.data);
+                        if (newData.type === 'notice' && newData.file?.content) {
+                            const fileHash = await utils.calculateFileHash(newData.file.content);
+                            newData.file.hash = fileHash;
+                            const isNewFile = !utils.isFileDownloaded(newData.file.name, fileHash);
+
+                            if (isNewFile) {
+                                currentNoticeData = newData;
+                                utils.setStorage(config.latestNoticeKey, newData);
+                                utils.resetUpdateDone();
+                                updateNoticePanelStatus();
+                                notifyNewUpdate();
+                            }
+                        }
+                    } catch (err) { console.error('解析更新失败：', err); }
+                };
+            }
+
+            // 4. 拉取最新更新
+            async function fetchLatestNotice() {
+                try {
+                    const res = await fetch(`https://${config.domain}.onrender.com/getLatestAnnouncement`);
+                    if (!res.ok) throw new Error(`请求失败（${res.status}）`);
+
+                    const result = await res.json();
+                    if (result.success && result.data?.file?.content) {
+                        const fileHash = await utils.calculateFileHash(result.data.file.content);
+                        result.data.file.hash = fileHash;
+                        const isNewFile = !utils.isFileDownloaded(result.data.file.name, fileHash);
+
+                        currentNoticeData = result.data;
+                        utils.setStorage(config.latestNoticeKey, result.data);
+
+                        if (isNewFile) {
+                            utils.resetUpdateDone();
+                        }
+                    } else {
+                        currentNoticeData = null;
+                    }
+                    updateNoticePanelStatus();
+                } catch (err) {
+                    console.error('拉取更新失败：', err);
+                    defaultTip.style.display = 'none';
+                    noNewUpdate.style.display = 'block';
+                }
+            }
+
+            // 5. 核心：JS动态控制公告面板显示/隐藏
+            function updateNoticePanelStatus() {
+                defaultTip.style.display = 'none';
+                noNewUpdate.style.display = 'none';
+                pushNotice.style.display = 'none';
+
+                if (!currentNoticeData?.file) {
+                    noNewUpdate.style.display = 'block';
+                    return;
+                }
+
+                const { hash } = currentNoticeData.file;
+                const isDownloaded = utils.isFileDownloaded(currentNoticeData.file.name, hash);
+                const isDone = utils.isUpdateDone(hash);
+
+                if (isDone) {
+                    noNewUpdate.style.display = 'block';
+                    return;
+                }
+
+                pushNotice.style.display = 'block';
+                renderUpdateContent(isDownloaded, hash);
+            }
+
+            // 渲染公告更新内容
+            function renderUpdateContent(isDownloaded, hash) {
+                const { name: fileName, date } = currentNoticeData.file;
+                pushNotice.innerHTML = `
+                    <div class="notice-title">更新</div>
+                    <div class="notice-time">更新时间：${utils.formatTime(date || new Date())}</div>
+                    <div class="progress-actions">
+                        <div class="download-progress" id="downloadProgress">
+                            <div class="progress-bar" id="progressBar" style="width: ${isDownloaded ? '100%' : '0%'}"></div>
+                        </div>
+                        <button class="action-btn ${isDownloaded ? 'update-btn' : 'download-btn'}" 
+                                id="downloadBtn" 
+                                onclick="${isDownloaded ? 'handleUpdate()' : 'handleDownload()'}">
+                            ${isDownloaded ? '更新' : '下载'}
+                        </button>
+                    </div>
+                `;
+            }
+
+            // 6. 下载逻辑
+            window.handleDownload = function() {
+                if (!currentNoticeData?.file) return;
+                const { name: fileName, content, hash } = currentNoticeData.file;
+                const progressBar = document.getElementById('progressBar');
+                const downloadBtn = document.getElementById('downloadBtn');
+
+                if (!progressBar || !downloadBtn || !content) return;
+                if (downloadInterval) clearInterval(downloadInterval);
+
+                downloadBtn.textContent = '下载中';
+                downloadBtn.disabled = true;
+                progressBar.style.width = '0%';
+
+                let progress = 0;
+                downloadInterval = setInterval(() => {
+                    progress += 5;
+                    progressBar.style.width = `${progress}%`;
+
+                    if (progress >= 100) {
+                        clearInterval(downloadInterval);
+                        downloadBtn.textContent = '更新';
+                        downloadBtn.className = 'action-btn update-btn';
+                        downloadBtn.onclick = handleUpdate;
+                        downloadBtn.disabled = false;
+                        utils.setStorage(config.downloadedFileKey, {
+                            name: fileName,
+                            hash: hash,
+                            time: Date.now()
+                        });
+                    }
+                }, 100);
+            };
+
+            // 7. 更新逻辑
+            window.handleUpdate = function() {
+                if (!currentNoticeData?.file) return;
+                if (!confirm('确认更新？更新后公告将隐藏，新公告会重新提示')) return;
+
+                try {
+                    const { name: fileName, content, hash } = currentNoticeData.file;
+                    if (!content) throw new Error('无最新页面内容');
+
+                    renderDynamicHtml(content);
+                    const pageData = { name: fileName, hash: hash, content: content, loadedTime: Date.now() };
+                    utils.saveLoadedPage(pageData);
+                    savedLoadedPage = pageData;
+                    utils.markUpdateDone(hash);
+                    updateNoticePanelStatus();
+
+                    alert('更新成功！公告已隐藏，有新公告将自动提示');
+                } catch (err) {
+                    alert(`操作失败：${err.message}`);
+                }
+            };
+
+            // 8. 新文件提示
+            function notifyNewUpdate() {
+                if (Notification.permission === 'granted') {
+                    new Notification('收到新公告', {
+                        body: `更新时间：${utils.formatTime(currentNoticeData.date)}`,
+                        icon: 'https://img.icons8.com/ios-glyphs/30/2563eb/announcement--v1.png'
+                    });
+                } else if (Notification.permission !== 'denied') {
+                    Notification.requestPermission().then(perm => perm === 'granted' && notifyNewUpdate());
+                }
+
+                alert('收到新公告！点击悬浮窗查看');
+                floatWindow.classList.add('active');
+                floatWindow.style.left = `${currentWindowPos.left}px`;
+                floatWindow.style.top = `${currentWindowPos.top}px`;
+                updateNoticePanelStatus();
+            }
+
+            // 9. 面板切换
+            function switchPanel(targetId) {
+                document.querySelectorAll('.content-panel').forEach(panel => {
+                    panel.classList.remove('active');
+                    panel.style.display = 'none';
+                });
+                document.getElementById(targetId).classList.add('active');
+                document.getElementById(targetId).style.display = 'block';
+                modalBack.style.display = 'block';
+
+                if (targetId === 'panelNotice') {
+                    updateNoticePanelStatus();
+                }
+            }
+
+            // 悬浮球/窗交互
+            floatBtn.addEventListener('touchstart', (e) => {
+                const touch = e.touches[0];
+                btnDragStart = { x: touch.clientX, y: touch.clientY, rect: floatBtn.getBoundingClientRect() };
+                btnIsDragging = false;
+            }, { passive: true });
+
+            floatBtn.addEventListener('touchmove', (e) => {
+                const touch = e.touches[0];
+                const dx = touch.clientX - btnDragStart.x;
+                const dy = touch.clientY - btnDragStart.y;
+                if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+                    btnIsDragging = true;
+                    const newLeft = Math.max(20, Math.min(btnDragStart.rect.left + dx, window.innerWidth - 80));
+                    const newTop = Math.max(20, Math.min(btnDragStart.rect.top + dy, window.innerHeight - 80));
+                    floatBtn.style.left = `${newLeft}px`;
+                    floatBtn.style.top = `${newTop}px`;
+                }
+            }, { passive: false });
+
+            floatBtn.addEventListener('click', () => {
+                if (btnIsDragging) return;
+                floatWindow.classList.toggle('active');
+                if (floatWindow.classList.contains('active')) {
+                    floatWindow.style.left = `${currentWindowPos.left}px`;
+                    floatWindow.style.top = `${currentWindowPos.top}px`;
+                }
+            });
+
+            document.getElementById('windowHeader').addEventListener('touchstart', (e) => {
+                if (!floatWindow.classList.contains('active')) return;
+                const touch = e.touches[0];
+                winDragStart = { x: touch.clientX, y: touch.clientY, rect: floatWindow.getBoundingClientRect() };
+                winIsDragging = false;
+            }, { passive: true });
+
+            document.getElementById('windowHeader').addEventListener('touchmove', (e) => {
+                if (!floatWindow.classList.contains('active')) return;
+                const touch = e.touches[0];
+                const dx = touch.clientX - winDragStart.x;
+                const dy = touch.clientY - winDragStart.y;
+                if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+                    winIsDragging = true;
+                    currentWindowPos = utils.checkWindowBound(winDragStart.rect.left + dx, winDragStart.rect.top + dy);
+                    floatWindow.style.left = `${currentWindowPos.left}px`;
+                    floatWindow.style.top = `${currentWindowPos.top}px`;
+                }
+            }, { passive: false });
+
+            // 面板按钮点击
+            modalBack.addEventListener('click', () => {
+                document.querySelectorAll('.content-panel').forEach(panel => {
+                    panel.classList.remove('active');
+                    panel.style.display = 'none';
+                });
+                funcButtons.style.display = 'flex';
+                modalBack.style.display = 'none';
+            });
+            btnNotice.addEventListener('click', () => {
+                funcButtons.style.display = 'none';
+                switchPanel('panelNotice');
+            });
+            document.getElementById('btnMy').addEventListener('click', () => {
+                funcButtons.style.display = 'none';
+                switchPanel('panelMy');
+            });
+            document.getElementById('btnContact').addEventListener('click', () => {
+                funcButtons.style.display = 'none';
+                switchPanel('panelContact');
+            });
+            document.getElementById('btnSetting').addEventListener('click', () => {
+                funcButtons.style.display = 'none';
+                switchPanel('panelSetting');
+            });
+
+            window.addEventListener('resize', () => {
+                if (floatWindow.classList.contains('active')) {
+                    currentWindowPos = utils.checkWindowBound(currentWindowPos.left, currentWindowPos.top);
+                    floatWindow.style.left = `${currentWindowPos.left}px`;
+                    floatWindow.style.top = `${currentWindowPos.top}px`;
+                }
+            });
+
+            // 注册登录系统 - 完全重写
+            class AuthManager {
+                constructor() {
+                    this.currentUser = null;
+                    this.init();
+                }
+
+                init() {
+                    this.bindEvents();
+                    this.loadUserFromStorage();
+                }
+
+                loadUserFromStorage() {
+                    try {
+                        const savedUser = localStorage.getItem('currentUser');
+                        if (savedUser) {
+                            this.currentUser = JSON.parse(savedUser);
+                            this.showUserInfo();
+                        }
+                    } catch (error) {
+                        console.warn('读取用户数据失败:', error);
+                    }
+                }
+
+                saveUserToStorage(user) {
+                    try {
+                        localStorage.setItem('currentUser', JSON.stringify(user));
+                    } catch (error) {
+                        console.warn('保存用户数据失败:', error);
+                    }
+                }
+
+                removeUserFromStorage() {
+                    try {
+                        localStorage.removeItem('currentUser');
+                    } catch (error) {
+                        console.warn('删除用户数据失败:', error);
+                    }
+                }
+
+                bindEvents() {
+                    // 选项卡切换
+                    document.querySelectorAll('.auth-tab').forEach(tab => {
+                        tab.addEventListener('click', () => {
+                            if (this.currentUser) return; // 登录后禁止切换
+                            this.switchTab(tab.getAttribute('data-tab'));
+                        });
+                    });
+                    // 登录按钮
+                    document.getElementById('login-btn').addEventListener('click', () => this.login());
+                    // 注册按钮
+                    document.getElementById('register-btn').addEventListener('click', () => this.register());
+                    // 退出按钮
+                    document.getElementById('logout-btn').addEventListener('click', () => this.logout());
+                    // 回车键提交
+                    document.addEventListener('keypress', (e) => {
+                        if (e.key === 'Enter') {
+                            const activeForm = document.querySelector('.auth-form.active');
+                            if (activeForm.id === 'login-form') this.login();
+                            else if (activeForm.id === 'register-form') this.register();
+                        }
+                    });
+                }
+
+                switchTab(tabName) {
+                    document.querySelectorAll('.auth-tab').forEach(tab => tab.classList.remove('active'));
+                    document.querySelector(`.auth-tab[data-tab="${tabName}"]`).classList.add('active');
+                    
+                    document.querySelectorAll('.auth-form').forEach(form => form.classList.remove('active'));
+                    document.getElementById(`${tabName}-form`).classList.add('active');
+                    
+                    // 更新按钮显示
+                    this.updateButtonVisibility(tabName);
+                    
+                    this.hideNotification();
+                }
+
+                updateButtonVisibility(tabName) {
+                    const loginBtn = document.getElementById('login-btn');
+                    const registerBtn = document.getElementById('register-btn');
+                    const logoutBtn = document.getElementById('logout-btn');
+                    const authTabs = document.getElementById('auth-tabs');
+                    
+                    if (this.currentUser) {
+                        // 已登录状态：隐藏选项卡和注册按钮，显示退出按钮
+                        if (authTabs) authTabs.style.display = 'none';
+                        loginBtn.style.display = 'none';
+                        registerBtn.style.display = 'none';
+                        logoutBtn.style.display = 'block';
+                    } else {
+                        // 未登录状态：显示选项卡，根据选项卡显示对应按钮，隐藏退出按钮
+                        if (authTabs) authTabs.style.display = 'flex';
+                        logoutBtn.style.display = 'none';
+                        
+                        if (tabName === 'login') {
+                            loginBtn.style.display = 'block';
+                            registerBtn.style.display = 'none';
+                        } else {
+                            loginBtn.style.display = 'none';
+                            registerBtn.style.display = 'block';
+                        }
+                    }
+                }
+
+                async login() {
+                    const username = document.getElementById('login-username').value.trim();
+                    const password = document.getElementById('login-password').value;
+                    if (!username || !password) {
+                        this.showNotification('请输入用户名和密码', 'error');
+                        return;
+                    }
+
+                    this.showLoading(true);
+                    try {
+                        // 模拟登录成功
+                        setTimeout(() => {
+                            this.currentUser = {
+                                username: username,
+                                email: username + '@example.com'
+                            };
+                            this.saveUserToStorage(this.currentUser);
+                            this.showUserInfo();
+                            this.showNotification('登录成功', 'success');
+                            this.showLoading(false);
+                        }, 1000);
+                    } catch (error) {
+                        this.showNotification('登录失败，请重试', 'error');
+                        this.showLoading(false);
+                    }
+                }
+
+                async register() {
+                    const username = document.getElementById('register-username').value.trim();
+                    const email = document.getElementById('register-email').value.trim();
+                    const password = document.getElementById('register-password').value;
+                    const inviteCode = document.getElementById('register-invite').value.trim();
+
+                    if (!username || !password || !inviteCode) {
+                        this.showNotification('请填写所有必填字段', 'error');
+                        return;
+                    }
+                    if (email && !this.isValidEmail(email)) {
+                        this.showNotification('请输入有效的邮箱', 'error');
+                        return;
+                    }
+
+                    this.showLoading(true);
+                    try {
+                        // 模拟注册成功
+                        setTimeout(() => {
+                            this.currentUser = {
+                                username: username,
+                                email: email || username + '@example.com'
+                            };
+                            this.saveUserToStorage(this.currentUser);
+                            this.showUserInfo();
+                            this.showNotification('注册成功', 'success');
+                            this.showLoading(false);
+                        }, 1000);
+                    } catch (error) {
+                        this.showNotification('注册失败，请重试', 'error');
+                        this.showLoading(false);
+                    }
+                }
+
+                isValidEmail(email) {
+                    const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                    return regex.test(email);
+                }
+
+                logout() {
+                    this.currentUser = null;
+                    this.removeUserFromStorage();
+                    this.hideUserInfo();
+                    this.switchTab('login');
+                    this.showNotification('已退出登录', 'success');
+                    
+                    // 清空表单
+                    document.getElementById('login-username').value = '';
+                    document.getElementById('login-password').value = '';
+                    document.getElementById('register-username').value = '';
+                    document.getElementById('register-email').value = '';
+                    document.getElementById('register-password').value = '';
+                    document.getElementById('register-invite').value = '';
+                }
+
+                showUserInfo() {
+                    document.querySelectorAll('.auth-form').forEach(form => form.classList.remove('active'));
+                    document.getElementById('user-info').classList.add('active');
+                    
+                    document.getElementById('user-name').textContent = this.currentUser.username;
+                    document.getElementById('user-email').textContent = this.currentUser.email || '未填写邮箱';
+                    
+                    // 更新按钮显示
+                    this.updateButtonVisibility('login');
+                }
+
+                hideUserInfo() {
+                    document.getElementById('user-info').classList.remove('active');
+                    document.getElementById('login-form').classList.add('active');
+                    
+                    // 更新按钮显示
+                    this.updateButtonVisibility('login');
+                }
+
+                showNotification(message, type) {
+                    const notification = document.getElementById('auth-notification');
+                    notification.textContent = message;
+                    notification.className = `auth-notification notification-${type}`;
+                    notification.style.display = 'block';
+                    setTimeout(() => this.hideNotification(), 5000);
+                }
+
+                hideNotification() {
+                    document.getElementById('auth-notification').style.display = 'none';
+                }
+
+                showLoading(show) {
+                    const loading = document.getElementById('auth-loading');
+                    loading.style.display = show ? 'block' : 'none';
+                }
+            }
+
+            // 启动
+            document.addEventListener('DOMContentLoaded', () => {
+                initPage();
+                initWebSocket();
+                fetchLatestNotice();
+                new AuthManager();
+                
+                // 启用登录注册按钮
+                setTimeout(() => {
+                    document.getElementById('login-btn').disabled = false;
+                    document.getElementById('register-btn').disabled = false;
+                    document.getElementById('auth-status-dot').className = 'status-dot status-connected';
+                    document.getElementById('auth-status-text').textContent = '已连接到服务器';
+                }, 1000);
+            });
+        })();
+    </script>
+</body>
+</html>
